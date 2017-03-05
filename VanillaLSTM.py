@@ -9,10 +9,11 @@ Date: March 1, 2017
 import tensorflow as tf
 import numpy as np
 import time
-import ipdb
+import pdb
 import argparse
 
 import rnn_segment
+import temp_optimizer
 
 # The vanilla LSTM model
 class VanillaLSTMModel():
@@ -40,25 +41,33 @@ class VanillaLSTMModel():
 		self.args = args
 		print("VanillaLSTMModel initializer is called..\n" \
 		      + "Time: " + time.ctime() + "\n" \
-			  + "  args.hidden_size " + str(args.hidden_size) + "\n" \
-			  + "  args.num_layers " + str(args.num_layers) + "\n" \
-			  + "  args.embedding_size " + str(args.embedding_size) + "\n")
+			  + "  args.hidden_size = " + str(args.hidden_size) + "\n" \
+			  + "  args.num_layers = " + str(args.num_layers) + "\n" \
+			  + "  args.embedding_size = " + str(args.embedding_size) + "\n" \
+			  + "  args.optimizer_choice = " + args.optimizer_choice + "\n" \
+			  + "  args.learning_rate = " + str(args.learning_rate) + "\n" \
+			  + "  args.grad_clip = " + str(args.grad_clip) + "\n")
 		
 		if training:
-			print("Traininig..\n")
+			print("This is a training session..")
+			print("Input batch size = " + str(args.batch_size) + "\n\n")
 		else:
-			print("This is a session other than training session..\n")
+			print("This is a session other than training..")
 			print("Input batch size = " + str(args.batch_size) + "\n\n")
 
 		# initialize a LSTM cell unit, hidden_size is the dimension of hidden state
-		cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
+		# TODO: (resolve) are the two kinds of cell's hidden state of the same size?
+		encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
+		decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
 
 		# TODO: (improve) Multi-layer RNN ocnstruction, if more than one layer
-		# cell = rnn_cell.MultiRNNCell([cell] * args.num_layers, state_is_tuple=False)
+		# encoder_cell = rnn_cell.MultiRNNCell([encoder_cell] * args.num_layers, state_is_tuple=True)
+		# decoder_cell = rnn_cell.MultiRNNCell([decoder_cell] * args.num_layers, state_is_tuple=True)
 		
 		# TODO: (improve) Dropout layer can be added here
 		# Store the recurrent unit
-		self.cell = cell
+		self.encoder_cell = encoder_cell
+		self.decoder_cell = decoder_cell
 
 		# TODO: (resolve) do we need to use a fixed seq_length?
 		# Input data contains sequences of input tokens of embedding_size dimension
@@ -71,7 +80,8 @@ class VanillaLSTMModel():
 
 		# Initial cell state of LSTM (initialized with zeros)
 		# TODO: (improve) might use xavier initializer? There seems to be no a staright-forward way
-		self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
+		self.initial_state = encoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
+		self.initial_state = decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
 		# Split inputs according to sequences: a 3D tensor, num_of_seq x seq_length x embedding_size
 		# -> list of size seq_length, each of whose element is of num_of_seq x 1 x embedding_size
@@ -84,17 +94,21 @@ class VanillaLSTMModel():
 		input_data_list = [tf.squeeze(input=inputs_member, axis=[1]) for inputs_member in input_data_temp]
 		del input_data_temp
 		
-		## This is where the LSTM models differ from each other.
+		## This is where the LSTM models differ from each other in substance.
+		## The other code might also differ but they are not substantial.
 		# call the encoder
-		_, self.encoder_final_state = rnn_segment.run(cell=self.cell, 
+		_, self.encoder_final_state = rnn_segment.run(cell=self.encoder_cell, 
 		                                         inputs=input_data_list, 
 												 initial_state=self.initial_state, 
-												 feed_previous=False)
+												 feed_previous=False,
+												 scope="vanLSTM_encoder")
 		# call the decoder
-		self.output_data, _ = rnn_segment.run(cell=self.cell, 
-		                                      inputs=input_data_list, 
-											  initial_state=self.encoder_final_state, 
-											  feed_previous=True)
+		self.output_data = self.input_data
+		#self.output_data, _ = rnn_segment.run(cell=self.decoder_cell, 
+		#                                      inputs=input_data_list, 
+		#									  initial_state=self.encoder_final_state, 
+		#									  feed_previous=True,
+		#									  scope="vanLSTM_decoder")
 		
 		
 		def get_sum_of_cost(output_data, target_data):
@@ -105,19 +119,28 @@ class VanillaLSTMModel():
 			target_data: batch_size x seq_length x output_vocab_size (one-hot)
 			'''
 			# TODO: (unfinished) finsh this function
-			return 0
+			return 1.
 
 
 		# Compute the cost scalar: specifically, the average cost per sequence
 		sum_of_cost = get_sum_of_cost(output_data=self.output_data, target_data=self.target_data)
+		#self.cost = tf.Variable(0.)
 		self.cost = tf.div(sum_of_cost, args.batch_size)
-
-		# Get trainable_variables list, and compute the gradients
+		print("self.cost:")
+		print self.cost
+		# Get trainable_variables list, print them, and compute the gradients
 		# Also clip the gradients if they are larger than args.grad_clip
-		trainable_var = tf.trainable_variables()
-		print("Number of trainable variables = " + str(len(trainable_var)))
-		self.gradients = tf.gradients(self.loss, trainable_variables)
-		self.clipped_grads, _ = tf.clip_by_global_norm(self.gradients, args.grad_clip)
+		trainable_vars = tf.trainable_variables()
+		print("Number of trainable variables = " + str(len(trainable_vars)))
+		for i, var in enumerate(trainable_vars):
+			print(str(trainable_vars[i].name) + \
+			      "\t" + str(trainable_vars[i].get_shape()) + \
+				  " x " + str(trainable_vars[i].dtype.name))
+		# self.gradients is a list of tuples of (grad_value, variable_name)
+		self.gradients = tf.gradients(self.cost, trainable_vars)
+		print("self.gradients:")
+		print self.gradients
+		clipped_grads, _ = tf.clip_by_global_norm(self.gradients, args.grad_clip)
 
 		# Using RMSprop, inspired by the LSTM paper of Dr. Alahi, Prof. Saverese, and Prof. Fei-Fei Li
 		if args.optimizer_choice == "rms":
@@ -130,7 +153,11 @@ class VanillaLSTMModel():
 			raise ValueError("Optimizer not supported: " + args.optimizer_choice)
 
 		# Train operator
-		self.train_op = optimizer.apply_gradients(zip(clipped_grads, trainable_var))
+		temp_zipped = zip(clipped_grads, trainable_vars)
+		print temp_zipped
+        #pdb.set_trace()
+		# Apply gradients. If a gradient of a variable is None, it will be weeded out.
+		self.train_op = optimizer.apply_gradients(temp_zipped)
 
 def main():
 	'''
@@ -173,6 +200,7 @@ def main():
 	args = parser.parse_args()
 	model = VanillaLSTMModel(args)
 	# TODO: (improve) maybe we do something more?
+
 
 if __name__ == "__main__":
 	main()

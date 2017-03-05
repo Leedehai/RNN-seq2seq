@@ -6,11 +6,11 @@ Author: Haihong Li
 Date: March 3, 2017
 
 RNN segment: a train of RNN cells (stacked vertically or single layer) linked together in series.
-              o u t p u t s
-              | | |     |
-initial_state-o-o-o-...-o- final_state
-              | | |     |
-              i n p u t s
+               o u t p u t s
+               | | |     |
+initial_state -o-o-o-...-o- final_state
+               | | |     |
+               i n p u t s
 """
 
 import tensorflow as tf
@@ -38,7 +38,6 @@ def run(cell, inputs, initial_state, feed_previous=False, scope="rnn"):
 
 	state = initial_state
 	outputs = []
-	#scope = "rnn"
 
 	#outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state)
 	#return (outputs, state)
