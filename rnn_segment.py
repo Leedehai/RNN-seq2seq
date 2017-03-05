@@ -16,10 +16,9 @@ initial_state-o-o-o-...-o- final_state
 import tensorflow as tf
 import numpy as np
 import ipdb
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 
-def rnn_segment_run(cell, inputs, initial_state, feed_previous=False, scope="rnn"):
+def run(cell, inputs, initial_state, feed_previous=False, scope="rnn"):
 	'''
 	RNN segment works.
 	Params:
@@ -43,7 +42,8 @@ def rnn_segment_run(cell, inputs, initial_state, feed_previous=False, scope="rnn
 
 	#outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state)
 	#return (outputs, state)
-	with variable_scope.variable_scope(scope or "rnn_decoder"):
+	print "run() called"
+	with tf.variable_scope(scope):
 		cell_state = initial_state
 		outputs = []
 		prev_cell_output = None
@@ -51,7 +51,7 @@ def rnn_segment_run(cell, inputs, initial_state, feed_previous=False, scope="rnn
 			if (feed_previous == True) and (prev_cell_output != None):
 				cell_input = prev_cell_output
 			if i > 0:
-				variable_scope.get_variable_scope().reuse_variables()
+				tf.get_variable_scope().reuse_variables()
 			cell_output, cell_state = cell(cell_input, cell_state)
 			outputs.append(cell_output)
 			if feed_previous == True:
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 	inputs = np.array([tf.constant([[1.,2.,3.],[4.,5.,6.]]),tf.constant([[7.,8.,9.],[10.,11.,12.]])])
 	with tf.Session() as sess:
 		with tf.variable_scope('test_1'):
-			rnn_segment_run(cell,inputs,initial_state,feed_previous=False)
+			run(cell,inputs,initial_state,feed_previous=False)
 		with tf.variable_scope('test_2'):
-			rnn_segment_run(cell,inputs,initial_state,feed_previous=True)
-		print("this module is functioning.")
+			run(cell,inputs,initial_state,feed_previous=True)
+		print("this module is functioning.") # test passed. March 5, 2017
