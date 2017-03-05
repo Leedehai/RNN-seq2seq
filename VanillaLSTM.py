@@ -9,8 +9,9 @@ Date: March 1, 2017
 import tensorflow as tf
 import numpy as np
 import time
-import pdb
 import argparse
+
+import pdb
 
 import rnn_segment
 import temp_optimizer
@@ -126,19 +127,23 @@ class VanillaLSTMModel():
 		sum_of_cost = get_sum_of_cost(output_data=self.output_data, target_data=self.target_data)
 		#self.cost = tf.Variable(0.)
 		self.cost = tf.div(sum_of_cost, args.batch_size)
-		print("self.cost:")
+		print("\nself.cost:")
 		print self.cost
 		# Get trainable_variables list, print them, and compute the gradients
 		# Also clip the gradients if they are larger than args.grad_clip
 		trainable_vars = tf.trainable_variables()
-		print("Number of trainable variables = " + str(len(trainable_vars)))
+		print("\nNumber of trainable variables = " + str(len(trainable_vars)))
 		for i, var in enumerate(trainable_vars):
 			print(str(trainable_vars[i].name) + \
 			      "\t" + str(trainable_vars[i].get_shape()) + \
 				  " x " + str(trainable_vars[i].dtype.name))
 		# self.gradients is a list of tuples of (grad_value, variable_name)
 		self.gradients = tf.gradients(self.cost, trainable_vars)
-		print("self.gradients:")
+		if args.model_unit_test_flag == True:
+			for i in xrange(len(self.gradients)):
+				if self.gradients[i] == None:
+					self.gradients[i] = tf.zeros(shape=trainable_vars[i].get_shape(), dtype=tf.float32)
+		print("\nself.gradients: length = " + str(len(self.gradients)))
 		print self.gradients
 		clipped_grads, _ = tf.clip_by_global_norm(self.gradients, args.grad_clip)
 
@@ -154,6 +159,7 @@ class VanillaLSTMModel():
 
 		# Train operator
 		temp_zipped = zip(clipped_grads, trainable_vars)
+		print("\ntemp_zipped: length = " + str(len(temp_zipped)))
 		print temp_zipped
         #pdb.set_trace()
 		# Apply gradients. If a gradient of a variable is None, it will be weeded out.
@@ -173,19 +179,19 @@ def main():
 	'''
 	parser = argparse.ArgumentParser()
 	# RNN cell hidden state's size
-	parser.add_argument('--hidden_size', type=int, default=64,
+	parser.add_argument('--hidden_size', type=int, default=1,
 	                    help='size of RNN cell hidden state')
 	# Number of stacked RNN layers. Only a single layer implemented
 	parser.add_argument('--num_layers', type=int, default=1,
 	                    help='number of stacked RNN layers')
 	# Maximum length of each sequence
-	parser.add_argument('--seq_length', type=int, default=16,
+	parser.add_argument('--seq_length', type=int, default=1,
 	                    help='maximum length of each sequence')
 	# Embedding size
-	parser.add_argument('--embedding_size', type=int, default=32,
+	parser.add_argument('--embedding_size', type=int, default=1,
 	                    help='embedding size of vectors')
 	# Batch size
-	parser.add_argument('--batch_size', type=int, default=2,
+	parser.add_argument('--batch_size', type=int, default=1,
 	                    help='number of sequences in a batch')
 	# Choice of optimzier
 	parser.add_argument('--optimizer_choice', type=str, default='rms',
@@ -196,8 +202,12 @@ def main():
 	# Gradient clip, i.e. maximum value of gradient amplitute allowed
 	parser.add_argument('--grad_clip', type=float, default=10.0,
 	                    help='gradient upbound, i.e. maximum value of gradient amplitute allowed')
+	# Model unit testing flag
+	parser.add_argument('--model_unit_test_flag', type=bool, default=True,
+	                    help='only set to true when performing unit test')
 	# Parse the arguments, and construct the model
 	args = parser.parse_args()
+	args.model_unit_test_flag = True
 	model = VanillaLSTMModel(args)
 	# TODO: (improve) maybe we do something more?
 
