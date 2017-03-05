@@ -16,40 +16,56 @@ initial_state-o-o-o-...-o- final_state
 import tensorflow as tf
 import numpy as np
 import ipdb
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.util import nest
 
-def rnn_segment_run(cell, inputs, initial_state, feed_previous=False):
+def rnn_segment_run(cell, inputs, initial_state, feed_previous=False, scope="rnn"):
 	'''
 	RNN segment works.
 	Params:
 	    cell: RNN cell, created by tf.nn.rnn_cell.BasicLSTMCell or else.
-	    inputs: list of tensors, variable length, each element is of size 
+	    inputs: list of Tensors, variable length, each element is of size 
 	        batch_size x embedding_size
 	    initial_state: the initial state, of size batch_size x hidden_size
 	    feed_previous: if True, then a cell's input is the previous cell's
 	        output, with the exception of the first cell, whose input is
 		    the first element of the input variable: inputs.
+		scope: VariableScope for the created subgraph
 	 Returns:
 	     outputs: list of tensors, length equals to the inputs, each
 		     element is of size batch_size x cell_output_size
+		 state: the hidden state in the end of this cell segment
 	'''
-	if inputs == []:
-		raise ValueError('RNN segment inputs should not be an empty list')
-	
+
 	state = initial_state
 	outputs = []
-	
-	if feed_previous == False:
-		for input_ in inputs:
-			output, state = cell(input_, state)
-			outputs.append(output)
-	elif feed_previous == True:
-		output, state = cell(inputs[0],state)
-		outputs.append(output)
-		if len(inputs) >= 2:
-			for input_ in inputs[1:]:
-				output, state = cell(outputs[-1], state)
-				outputs.append(output)
-	else:
-		raise ValueError('feed_previous is not a boolean')
-	
-	return (outputs, state)
+	#scope = "rnn"
+
+	#outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state)
+	#return (outputs, state)
+	with variable_scope.variable_scope(scope or "rnn_decoder"):
+		cell_state = initial_state
+		outputs = []
+		prev_cell_output = None
+		for i, cell_input in enumerate(inputs):
+			if (feed_previous == True) and (prev_cell_output != None):
+				cell_input = prev_cell_output
+			if i > 0:
+				variable_scope.get_variable_scope().reuse_variables()
+			cell_output, cell_state = cell(cell_input, cell_state)
+			outputs.append(cell_output)
+			if feed_previous == True:
+				prev_cell_output = cell_output
+	return outputs, cell_state
+
+
+if __name__ == "__main__":
+	cell = tf.nn.rnn_cell.BasicLSTMCell(3)
+	initial_state = cell.zero_state(batch_size=2, dtype=tf.float32)
+	inputs = np.array([tf.constant([[1.,2.,3.],[4.,5.,6.]]),tf.constant([[7.,8.,9.],[10.,11.,12.]])])
+	with tf.Session() as sess:
+		with tf.variable_scope('test_1'):
+			rnn_segment_run(cell,inputs,initial_state,feed_previous=False)
+		with tf.variable_scope('test_2'):
+			rnn_segment_run(cell,inputs,initial_state,feed_previous=True)
+		print("this module is functioning.")
