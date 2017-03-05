@@ -9,8 +9,8 @@ Date: March 1, 2017
 import tensorflow as tf
 import numpy as np
 import time
-from tensorflow.python.ops import seq2seq
 import ipdb
+import rnn_segment
 
 # The vanilla LSTM model
 class VanillaLSTMModel():
@@ -59,9 +59,9 @@ class VanillaLSTMModel():
 
 		# TODO: (resolve) do we need to use a fixed seq_length?
 		# Input data contains sequences of input tokens of embedding_size dimension (defualt = 1)
-		self.input_data = tf.placeholder(tf.float32, [None, args.seq_length, args.input_token_size])
+		self.input_data = tf.placeholder(tf.float32, [None, args.seq_length, args.embedding_size])
 		# Target data contains sequences of output tokens of embedding_size dimension (default = 1)
-		self.target_data = tf.placeholder(tf.float32, [None, args.seq_length, arg.output_token_size])
+		self.target_data = tf.placeholder(tf.float32, [None, args.seq_length, args.embedding_size])
 
         # Learning rate
 		self.lr = tf.Variable(args.learning_rate, trainable=False, name="learning_rate")
@@ -70,20 +70,25 @@ class VanillaLSTMModel():
 		# TODO: (improve) might use xavier initializer? There seems to be no a staright-forward way
 		self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
-		# TODO: (unfinished) construct the encoder, decoder, link the two; feed in data and get out result
+		# call the encoder
+		# TODO: (unfinished) should change the form of self.input_data, from a 3D tensor
+		#       to a list, with each element of size batch_size x embedding_size
+		_, encoder_final_state = rnn_segment_run(cell=self.cell, inputs=self.input_data, initial_state=self.initial_state, feed_previous=False)
+		# call the decoder
+		self.output_data, _ = rnn_segment_run(cell=self.cell, inputs=self.input_data, initial_state=self.initial_state, feed_previous=True)
 		
-		def get_sum_of_cost(output_data,target_data):
+		def get_sum_of_cost(output_data, target_data):
 			'''
 			Calculate the sum of cost of this training batch using cross entropy.
 			params:
 			output_data: batch_size x seq_length x embedding_size
-			target_data: batch_size x seq_length x embedding_size (one-hot)
+			target_data: batch_size x seq_length x output_vocab_size (one-hot)
 			'''
 			# TODO: (unfinished) finsh this function
 
 
 		# Compute the cost: specifically, the average cost per sequence
-		sum_of_cost = get_sum_of_cost(output_data=self.output_data,target_data=self.target_data)
+		sum_of_cost = get_sum_of_cost(output_data=self.output_data, target_data=self.target_data)
 		self.cost = tf.div(sum_of_cost, args.batch_size)
 
 		# Get trainable_variables, and compute the gradients
@@ -99,10 +104,3 @@ class VanillaLSTMModel():
 
 		# Train operator
 		self.train_op = optimizer.apply_gradients(zip(clipped_grads, trainable_var))
-
-	def sample(self, sess):
-		'''
-		Given one sequence, output the yhat (not softmaxed)
-		'''
-		# TODO: (unfinished)
-
