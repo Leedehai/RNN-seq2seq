@@ -32,13 +32,13 @@ class VanillaLSTMModel():
 		    args.num_layers (default = 1, i.e. no stacking), 
 		    args.seq_length, 
 		    args.input_embedding_size
-			args.output_embedding_size
+			args.output_vocab_size
 		    args.batch_size (i.e. the number of sequences in each batch)
 		    args.optimizer_choice (defualt = "rms", also could be "adam", "grad_desc")
 		    args.learning_rate, 
 		    args.grad_clip
 		NOTE Each cell's input is batch_size x 1 x input_embedding_size
-		NOTE Each cell's output is batch_size x 1 x output_embedding_size
+		NOTE Each cell's output is batch_size x 1 x hidden_size (needs to be converted)
 		'''
 		# Store the arguments, and print the important argument values
 		self.args = args
@@ -46,7 +46,7 @@ class VanillaLSTMModel():
 		      + "Time: " + time.ctime() + "\n" \
 			  + "  args.hidden_size (H) = " + str(args.hidden_size) + "\n" \
 			  + "  args.input_embedding_size (Di) = " + str(args.input_embedding_size) + "\n" \
-			  + "  args.output_embedding_size (Do) = " + str(args.output_embedding_size) + "\n" \
+			  + "  args.output_vocab_size (Do) = " + str(args.output_vocab_size) + "\n" \
 			  + "  args.num_layers = " + str(args.num_layers) + "\n" \
 			  + "  args.optimizer_choice = " + args.optimizer_choice + "\n" \
 			  + "  args.learning_rate = " + str(args.learning_rate) + "\n" \
@@ -63,10 +63,12 @@ class VanillaLSTMModel():
 		# TODO: (resolve) are the two kinds of cell's hidden state of the same size?
 		encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
 		decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
+		
+		# convert cell's outputs (batch_size x hidden_size for each cell) to batch_size x output_vocab_size
 		# y_hat = softmax(tf.add(tf.matmul(cell_output, output_ws), output_bs)), output_bs = zeros, for now
 		with tf.variable_scope("vanLSTM_decoder/decoder_accessory"):
-			self.output_ws = tf.get_variable("output_ws", [args.hidden_size, args.output_embedding_size])
-			output_converter_lambda = lambda cell_output: tf.nn.softmax(logits=tf.matmul(cell_output, self.output_ws), dim=1)
+			self.output_ws = tf.get_variable("output_ws", [args.hidden_size, args.output_vocab_size])
+			output_converter_lambda = lambda cell_output_: tf.nn.softmax(logits=tf.matmul(cell_output_, self.output_ws), dim=1)
 			self.output_converter_lambda = output_converter_lambda
 
 		# TODO: (improve) Multi-layer RNN ocnstruction, if more than one layer
@@ -80,8 +82,8 @@ class VanillaLSTMModel():
 
 		# Input data contains sequences of input tokens of input_embedding_size dimension
 		self.input_data = tf.placeholder(tf.float32, [None, args.seq_length, args.input_embedding_size])
-		# Target data contains sequences of output tokens of output_embedding_size dimension
-		self.target_data = tf.placeholder(tf.float32, [None, args.seq_length, args.output_embedding_size])
+		# Target data contains sequences of output tokens of output_vocab_size dimension
+		self.target_data = tf.placeholder(tf.float32, [None, args.seq_length, args.output_vocab_size])
 
         # Learning rate
 		self.lr = tf.Variable(args.learning_rate, trainable=False, name="learning_rate")
@@ -117,27 +119,38 @@ class VanillaLSTMModel():
 		#print("[DEBUG] self.encoder_final_state: " + str(self.encoder_final_state))
 		#print("[DEBUG] self.decoder_inital_state: " + str(self.decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)))
 		self.output_data = self.input_data
-		cell_outputs, _ = rnn_segment.run(cell=decoder_cell, 
+		self.cell_outputs, _ = rnn_segment.run(cell=decoder_cell, 
 											  inputs=input_data_list, 
 											  initial_state=self.encoder_final_state, 
 											  feed_previous=True,
 											  loop_func=self.output_converter_lambda,
 											  scope="vanLSTM_decoder")
-		self.output_data = [output_converter_lambda(cell_output_) for cell_output_ in cell_outputs]
+		self.output_data = [output_converter_lambda(cell_output_) for cell_output_ in self.cell_outputs]
 		
-		def get_sum_of_cost(output_data, target_data):
+		def get_sum_of_cost(cell_outputs, targets):
 			'''
 			Calculate the sum of cost of this training batch using cross entropy.
 			params:
-			output_data: batch_size x seq_length x output_embedding_size
-			target_data: batch_size x seq_length x output_vocab_size (one-hot)
+			cell_outputs: list of length seq_length, each element of size batch_size x hidden_size
+			targets: list of length seq_length, each element of size batch_size x output_vocab_size (one-hot)
+			                                          # batch_size x seq_length x output_vocab_size (one-hot)
 			'''
-			# TODO: (unfinished) finsh this function
-			return 1.
+			# affine mapping from hidden_size dimensional space to output_vocab_size dimensional space
+			# affine_mapped_cell_outputs is list of lengrh seq_length, each of size batch_size x output_vocab_size
+			affine_mapped_cell_outputs = [tf.matmul(cell_output_, self.output_ws) for cell_output_ in cell_outputs]
+			# affine_mapped_cell_outputs is NOT softmaxed.
+			# affine_mapped_cell_outputs and targets are both list of length seq_length, 
+			# and their elements are of size batch_size x output_vocab_size
+			sum_of_cost = 0.
+			# for i in xrange(len(targets)):
+			# 	affined_mapped_ = affine_mapped_cell_outputs[i]
+			# 	target_ = targets[i]
+			# 	sum_of_cost += tf.nn.softmax_cross_entropy_with_logits(logits=affined_mapped_, labels=target_, name=None).eval()
+			return sum_of_cost
 
 
 		# Compute the cost scalar: specifically, the average cost per sequence
-		sum_of_cost = get_sum_of_cost(output_data=self.output_data, target_data=self.target_data)
+		sum_of_cost = get_sum_of_cost(cell_outputs=self.cell_outputs, targets=self.target_data)
 		#self.cost = tf.Variable(0.)
 		self.cost = tf.div(sum_of_cost, args.batch_size)
 		print("\n[DEBUG] self.cost: ") + str(self.cost)
@@ -187,7 +200,7 @@ def main():
 		args.num_layers (default = 1, i.e. no stacking), 
 		args.seq_length, 
 	    args.input_embedding_size, 
-		args.output_embedding_size,
+		args.output_vocab_size,
 		args.batch_size (i.e. the number of sequences in each batch)
 		args.optimizer_choice (defualt = "rms", also could be "adam", "grad_desc")
 		args.learning_rate, 
@@ -207,8 +220,8 @@ def main():
 	parser.add_argument('--input_embedding_size', type=int, default=96,
 	                    help='embedding size of input vectors')
 	# Embedding size of output
-	parser.add_argument('--output_embedding_size', type=int, default=92,
-	                    help='embedding size of output vectors')
+	parser.add_argument('--output_vocab_size', type=int, default=92,
+	                    help='size of output vocabulary')
 	# Batch size
 	parser.add_argument('--batch_size', type=int, default=100,
 	                    help='number of sequences in a batch')
