@@ -66,7 +66,8 @@ class VanillaLSTMModel():
 		# y_hat = softmax(tf.add(tf.matmul(cell_output, output_ws), output_bs)), output_bs = zeros, for now
 		with tf.variable_scope("vanLSTM_decoder/decoder_accessory"):
 			self.output_ws = tf.get_variable("output_ws", [args.hidden_size, args.output_embedding_size])
-			self.output_converter_lambda = lambda cell_output: tf.nn.softmax(logits=tf.matmul(cell_output, self.output_ws), dim=1)
+			output_converter_lambda = lambda cell_output: tf.nn.softmax(logits=tf.matmul(cell_output, self.output_ws), dim=1)
+			self.output_converter_lambda = output_converter_lambda
 
 		# TODO: (improve) Multi-layer RNN ocnstruction, if more than one layer
 		# encoder_cell = rnn_cell.MultiRNNCell([encoder_cell] * args.num_layers, state_is_tuple=True)
@@ -77,7 +78,6 @@ class VanillaLSTMModel():
 		self.encoder_cell = encoder_cell
 		self.decoder_cell = decoder_cell
 
-		# TODO: (resolve) do we need to use a fixed seq_length?
 		# Input data contains sequences of input tokens of input_embedding_size dimension
 		self.input_data = tf.placeholder(tf.float32, [None, args.seq_length, args.input_embedding_size])
 		# Target data contains sequences of output tokens of output_embedding_size dimension
@@ -104,7 +104,7 @@ class VanillaLSTMModel():
 		## This is where the LSTM models differ from each other in substance.
 		## The other code might also differ but they are not substantial.
 		# call the encoder
-		print("[DEBUG] self.initial_state: " + str(self.initial_state))
+		#print("[DEBUG] self.initial_state: " + str(self.initial_state))
 		#with tf.variable_scope("vanLSTM_encoder"):
 		_, self.encoder_final_state = rnn_segment.run(cell=encoder_cell, 
 													  inputs=input_data_list, 
@@ -113,18 +113,17 @@ class VanillaLSTMModel():
 													  loop_func=None,
 													  scope="vanLSTM_encoder")
 		# call the decoder
-
 		#with tf.variable_scope("vanLSTM_decoder"):
-		print("[DEBUG] self.encoder_final_state: " + str(self.encoder_final_state))
-		print("[DEBUG] self.decoder_inital_state: " + str(self.decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)))
+		#print("[DEBUG] self.encoder_final_state: " + str(self.encoder_final_state))
+		#print("[DEBUG] self.decoder_inital_state: " + str(self.decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)))
 		self.output_data = self.input_data
-		self.output_data, _ = rnn_segment.run(cell=decoder_cell, 
+		cell_outputs, _ = rnn_segment.run(cell=decoder_cell, 
 											  inputs=input_data_list, 
 											  initial_state=self.encoder_final_state, 
 											  feed_previous=True,
 											  loop_func=self.output_converter_lambda,
 											  scope="vanLSTM_decoder")
-		
+		self.output_data = [output_converter_lambda(cell_output_) for cell_output_ in cell_outputs]
 		
 		def get_sum_of_cost(output_data, target_data):
 			'''

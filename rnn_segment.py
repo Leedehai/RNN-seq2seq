@@ -35,42 +35,41 @@ def run(cell, inputs, initial_state, feed_previous=False, loop_func=None, scope=
 		scope: VariableScope for the created subgraph
 	 Returns:
 	     outputs: list of tensors, length equals to the inputs, each
-		     element is of size batch_size x cell_output_size
+		     element is of size batch_size x (input/output)_embedding_size
+			 NOTE NOT converted to yhat
 		 state: the hidden state in the end of this cell segment
 	'''
 	if feed_previous == True and loop_func == None:
-		pass
-		#raise ValueError("feed_previous is True, but loop_func is not given")
+		raise ValueError("feed_previous is True, but loop_func is not given")
 	state = initial_state
 	outputs = []
 	
 	#outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state)
 	#return (outputs, state)
-	print "\n\033[32m[DEBUG] an rnn_segement.run() is linked into the computational graph in scope " + scope + "\033[m"
+	#print "\n\033[32m[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope + "\033[m"
+	print "\n[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope
 	
 	with tf.variable_scope(scope):
 		cell_state = initial_state
-		print("\n[DEBUG] initial_state: " + str(initial_state))
+		#print("\n[INFO] rnn_segment initial_state: " + str([tp.get_shape().as_list() for tp in cell_state]))
 		outputs = []
 		prev_cell_output = None
-		#pdb.set_trace()
 		for i, cell_input in enumerate(inputs):
 			if (feed_previous == True) and (prev_cell_output != None):
 				cell_input = prev_cell_output_converted
 			if i > 0:
 				tf.get_variable_scope().reuse_variables()
-				#pdb.set_trace()
-			print("\n[DEBUG] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_input: " + str(cell_input))
-			print("\n[DEBUG] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_state: " + str(cell_state))
+			#print("\n[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_input: Tensor " + str(cell_input.get_shape().as_list()))
+			#print("[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
 			cell_output, cell_state = cell(cell_input, cell_state)
-			print("\n[DEBUG] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_output: " + str(cell_output))
-			print("\n[DEBUG] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_state: " + str(cell_state))
+			#print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_output: Tensor " + str(cell_output.get_shape().as_list()))
+			#print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
 			outputs.append(cell_output)
 			if feed_previous == True:
 				prev_cell_output_converted = loop_func(cell_output)
-				#print("\n[DEBUG] \033[33mPREV_CELL_OUTPUT " + scope + "\n" + str(i) + " \033[mprev_cell_output: " + str(prev_cell_output))
+				#print("\n[INFO] \033[33mPREV_CELL_OUTPUT " + scope + "\n" + str(i) + " \033[mprev_cell_output: " + str(prev_cell_output))
+	# NOTE outputs not converted to yhat.
 	return outputs, cell_state
-
 
 if __name__ == "__main__":
 	cell = tf.nn.rnn_cell.BasicLSTMCell(3)
