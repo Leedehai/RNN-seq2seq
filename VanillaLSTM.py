@@ -107,11 +107,11 @@ class VanillaLSTMModel():
 		print("[DEBUG] self.initial_state: " + str(self.initial_state))
 		#with tf.variable_scope("vanLSTM_encoder"):
 		_, self.encoder_final_state = rnn_segment.run(cell=encoder_cell, 
-													      inputs=input_data_list, 
-													      initial_state=self.initial_state, 
-													      feed_previous=False,
-														  loop_func=None,
-													      scope="vanLSTM_encoder")
+													  inputs=input_data_list, 
+													  initial_state=self.initial_state, 
+													  feed_previous=False,
+													  loop_func=None,
+													  scope="vanLSTM_encoder")
 		# call the decoder
 
 		#with tf.variable_scope("vanLSTM_decoder"):
@@ -119,11 +119,11 @@ class VanillaLSTMModel():
 		print("[DEBUG] self.decoder_inital_state: " + str(self.decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)))
 		self.output_data = self.input_data
 		self.output_data, _ = rnn_segment.run(cell=decoder_cell, 
-												  inputs=input_data_list, 
-												  initial_state=self.encoder_final_state, 
-												  feed_previous=True,
-												  loop_func=self.output_converter_lambda,
-												  scope="vanLSTM_decoder")
+											  inputs=input_data_list, 
+											  initial_state=self.encoder_final_state, 
+											  feed_previous=True,
+											  loop_func=self.output_converter_lambda,
+											  scope="vanLSTM_decoder")
 		
 		
 		def get_sum_of_cost(output_data, target_data):
