@@ -31,7 +31,7 @@ import numpy as np
 
 import pdb
 
-def run(cell, inputs, initial_state, cell_input_size=None, feed_previous=False, loop_func=None, scope="rnn_segment"):
+def run(cell, inputs, initial_state, cell_input_size=None, feed_previous=False, loop_func=None, scope="rnn_segment", verbose=False):
 	'''
 	RNN segment works.
 	Params:
@@ -65,12 +65,14 @@ def run(cell, inputs, initial_state, cell_input_size=None, feed_previous=False, 
 	state = initial_state
 	outputs = []
 	
-	print "\n\033[32m[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope + "\033[m"
-	print "\n[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope
+	if verbose: 
+		print "\n\033[32m[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope + "\033[m"
+		print "\n[INFO] an rnn_segement.run() is linked into the computational graph in scope " + scope
 	
 	with tf.variable_scope(scope):
 		cell_state = initial_state
-		print("\n[INFO] rnn_segment initial_state: " + str([tp.get_shape().as_list() for tp in cell_state]))
+		if verbose: 
+			print("\n[INFO] rnn_segment initial_state: " + str([tp.get_shape().as_list() for tp in cell_state]))
 		outputs = []
 		if feed_previous == True:
 			if cell_input_size == None or isinstance(cell_input_size,list) == False or len(list(cell_input_size)) != 2:
@@ -82,15 +84,18 @@ def run(cell, inputs, initial_state, cell_input_size=None, feed_previous=False, 
 				cell_input = prev_cell_output_yhat
 			if i > 0:
 				tf.get_variable_scope().reuse_variables()
-			print("\n[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_input: Tensor " + str(cell_input.get_shape().as_list()))
-			print("[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
+			if verbose:
+				print("\n[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_input: Tensor " + str(cell_input.get_shape().as_list()))
+				print("[INFO] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
 			cell_output, cell_state = cell(cell_input, cell_state)
-			print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_output: Tensor " + str(cell_output.get_shape().as_list()))
-			print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
+			if verbose:
+				print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_output: Tensor " + str(cell_output.get_shape().as_list()))
+				print("[INFO] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_state: Tensor tuple " + str([tp.get_shape().as_list() for tp in cell_state]))
 			outputs.append(cell_output)
 			if feed_previous == True:
 				prev_cell_output_yhat = loop_func(cell_output)
-				print("\n[INFO] \033[33mPREV_CELL_OUTPUT " + scope + "\n" + str(i) + " \033[mprev_cell_output_yhat: " + str(prev_cell_output_yhat.get_shape().as_list()))
+				if verbose:
+					print("\n[INFO] \033[33mPREV_CELL_OUTPUT " + scope + "\n" + str(i) + " \033[mprev_cell_output_yhat: " + str(prev_cell_output_yhat.get_shape().as_list()))
 	# NOTE outputs not converted to yhat.
 	return outputs, cell_state
 
@@ -103,4 +108,4 @@ if __name__ == "__main__":
 			run(cell, inputs, initial_state, cell_input_size=[2,3], feed_previous=False)
 		with tf.variable_scope('test_2'):
 			run(cell, inputs, initial_state, cell_input_size=[2,3], feed_previous=True, loop_func=lambda x : x)
-		print("this module is functioning.") # test passed. 19:47 March 5, 2017
+		print("this module is functioning.") # test passed. 20:55 March 5, 2017

@@ -32,18 +32,22 @@ class VanillaLSTMModel():
 		  args: contains arguments required for the Model creation --
 		    args.hidden_size (i.e. the size of hidden state)
 		    args.num_layers (default = 1, i.e. no stacking), 
-		    args.seq_length, 
-		    args.input_embedding_size
-			args.output_vocab_size
-		    args.batch_size (i.e. the number of sequences in each batch)
-		    args.optimizer_choice (defualt = "rms", also could be "adam", "grad_desc")
+		    args.input_seq_length,
+			args.target_seq_length, 
+		    args.input_embedding_size,
+			args.output_vocab_size,
+		    args.batch_size (i.e. the number of sequences in each batch),
+		    args.optimizer_choice (defualt = "rms", also could be "adam", "grad_desc"),
 		    args.learning_rate, 
 		    args.grad_clip
+			args.test
+			args.verbose
 		NOTE Each cell's input is batch_size x 1 x input_embedding_size
 		NOTE Each cell's output is batch_size x 1 x hidden_size (needs to be converted)
 		'''
 		# Store the arguments, and print the important argument values
 		self.args = args
+		verbose = args.verbose
 		print("VanillaLSTMModel initializer is called..\n" \
 		      + "Time: " + time.ctime() + "\n" \
 			  + "  args.hidden_size (H) = " + str(args.hidden_size) + "\n" \
@@ -56,10 +60,10 @@ class VanillaLSTMModel():
 		
 		if training:
 			print("This is a training session..")
-			print("Input batch size = " + str(args.batch_size) + "\n\n")
+			print("Input batch size = " + str(args.batch_size) + "\n")
 		else:
 			print("This is a session other than training..")
-			print("Input batch size = " + str(args.batch_size) + "\n\n")
+			print("Input batch size = " + str(args.batch_size) + "\n")
 
 		# initialize a LSTM cell unit, hidden_size is the dimension of hidden state
 		# TODO: (resolve) are the two kinds of cell's hidden state of the same size?
@@ -70,7 +74,9 @@ class VanillaLSTMModel():
 		# y_hat = softmax(tf.add(tf.matmul(cell_output, output_ws), output_bs)), output_bs = zeros, for now
 		with tf.variable_scope("vanLSTM_decoder/decoder_accessory"):
 			self.output_ws = tf.get_variable("output_ws", [args.hidden_size, args.output_vocab_size])
-			output_converter_lambda = lambda cell_output_: tf.nn.softmax(logits=tf.matmul(cell_output_, self.output_ws), dim=1)
+			output_affine_map_lambda = lambda cell_output_: tf.matmul(cell_output_, self.output_ws)
+			output_converter_lambda = lambda cell_output_: tf.nn.softmax(logits=output_affine_map_lambda(cell_output_), dim=1)
+			self.output_affine_map_lambda = output_affine_map_lambda
 			self.output_converter_lambda = output_converter_lambda
 
 		# TODO: (improve) Multi-layer RNN ocnstruction, if more than one layer
@@ -83,9 +89,9 @@ class VanillaLSTMModel():
 		self.decoder_cell = decoder_cell
 
 		# Input data contains sequences of input tokens of input_embedding_size dimension
-		self.input_data = tf.placeholder(tf.float32, [None, args.seq_length, args.input_embedding_size])
+		self.input_data = tf.placeholder(tf.float32, [None, args.input_seq_length, args.input_embedding_size])
 		# Target data contains sequences of output tokens of output_vocab_size dimension
-		self.target_data = tf.placeholder(tf.float32, [None, args.seq_length, args.output_vocab_size])
+		self.target_data = tf.placeholder(tf.float32, [None, args.target_seq_length, args.output_vocab_size])
 
         # Learning rate
 		self.lr = tf.Variable(args.learning_rate, trainable=False, name="learning_rate")
@@ -94,16 +100,19 @@ class VanillaLSTMModel():
 		# TODO: (improve) might use xavier initializer? There seems to be no a staright-forward way
 		self.initial_state = encoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
-		# Split inputs according to sequences: a 3D Tensor, num_of_seq x seq_length x input_embedding_size
-		# -> list of size seq_length, each of whose element is of num_of_seq x 1 x input_embedding_size
+		# Split inputs and targets according to sequences: a 3D Tensor, num_of_seq x seq_length x Di/Vo
+		# -> list of size seq_length, each of whose element is of num_of_seq x 1 x Di/Vo
 		if tf.__version__[0:2] == '0.':
-			input_data_temp = tf.split(split_dim=1, num_split=args.seq_length, value=self.input_data)
+			input_data_temp = tf.split(split_dim=1, num_split=args.input_seq_length, value=self.input_data)
+			target_data_temp = tf.split(split_dim=1, num_split=args.target_seq_length, value=self.target_data)
 		elif tf.__version__[0:2] == '1.':
-			input_data_temp = tf.split(value=self.input_data, num_split=args.seq_length, split_dim=1)
-		# list of size seq_length, each of which is num_of_seq x 1 x input_embedding_size
-		# -> list of size seq_length, each of which is num_of_seq x input_embedding_size
-		input_data_list = [tf.squeeze(input=inputs_member, axis=[1]) for inputs_member in input_data_temp]
-		del input_data_temp
+			input_data_temp = tf.split(value=self.input_data, num_split=args.input_seq_length, split_dim=1)
+			target_data_temp = tf.split(value=self.target_data, num_split=args.target_seq_length, split_dim=1)
+		# list of size seq_length, each of which is num_of_seq x 1 x Di/Vo
+		# -> list of size seq_length, each of which is num_of_seq x Di/Vo
+		input_data_list = [tf.squeeze(input=list_member, axis=[1]) for list_member in input_data_temp]
+		target_data_list = [tf.squeeze(input=list_member, axis=[1]) for list_member in target_data_temp]
+		del input_data_temp, target_data_temp
 		
 		## This is where the LSTM models differ from each other in substance.
 		## The other code might also differ but they are not substantial.
@@ -116,7 +125,8 @@ class VanillaLSTMModel():
 													  initial_state=self.initial_state, 
 													  feed_previous=False,
 													  loop_func=None,
-													  scope="vanLSTM_encoder")
+													  scope="vanLSTM_encoder",
+													  verbose=args.verbose)
 		# call the decoder
 		#with tf.variable_scope("vanLSTM_decoder"):
 		#print("[DEBUG] self.encoder_final_state: " + str(self.encoder_final_state))
@@ -128,7 +138,9 @@ class VanillaLSTMModel():
 											  initial_state=self.encoder_final_state, 
 											  feed_previous=True,
 											  loop_func=self.output_converter_lambda,
-											  scope="vanLSTM_decoder")
+											  scope="vanLSTM_decoder",
+											  verbose=args.verbose)
+		# output_data is softmaxed.
 		self.output_data = [output_converter_lambda(cell_output_) for cell_output_ in self.cell_outputs]
 		
 		def get_sum_of_cost(cell_outputs, targets):
@@ -137,27 +149,27 @@ class VanillaLSTMModel():
 			params:
 			cell_outputs: list of length seq_length, each element of size batch_size x hidden_size
 			targets: list of length seq_length, each element of size batch_size x output_vocab_size (one-hot)
-			                                          # batch_size x seq_length x output_vocab_size (one-hot)
 			'''
 			# affine mapping from hidden_size dimensional space to output_vocab_size dimensional space
-			# affine_mapped_cell_outputs is list of lengrh seq_length, each of size batch_size x output_vocab_size
-			affine_mapped_cell_outputs = [tf.matmul(cell_output_, self.output_ws) for cell_output_ in cell_outputs]
+			# affine_mapped_cell_outputs is list of length target_seq_length, each of size batch_size x output_vocab_size
+			affine_mapped_cell_outputs = [output_affine_map_lambda(cell_output_) for cell_output_ in cell_outputs]
 			# affine_mapped_cell_outputs is NOT softmaxed.
-			# affine_mapped_cell_outputs and targets are both list of length seq_length, 
+			# affine_mapped_cell_outputs and targets are both list of length target_seq_length, 
 			# and their elements are of size batch_size x output_vocab_size
 			sum_of_cost = 0.
-			# for i in xrange(len(targets)):
-			# 	affined_mapped_ = affine_mapped_cell_outputs[i]
-			# 	target_ = targets[i]
-			# 	sum_of_cost += tf.nn.softmax_cross_entropy_with_logits(logits=affined_mapped_, labels=target_, name=None).eval()
+			for i in xrange(len(targets)):
+				affined_mapped_ = affine_mapped_cell_outputs[i]
+				target_ = targets[i]
+				sum_of_cost += tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(logits=affined_mapped_, labels=target_, name=None))
 			return sum_of_cost
 
 
 		# Compute the cost scalar: specifically, the average cost per sequence
-		sum_of_cost = get_sum_of_cost(cell_outputs=self.cell_outputs, targets=self.target_data)
+		sum_of_cost = get_sum_of_cost(cell_outputs=self.cell_outputs, targets=target_data_list)
 		#self.cost = tf.Variable(0.)
 		self.cost = tf.div(sum_of_cost, args.batch_size)
-		print("\n[DEBUG] self.cost: ") + str(self.cost)
+		if verbose:
+			print("\n[DEBUG] self.cost: ") + str(self.cost)
 
 		# Get trainable_variables list, print them, and compute the gradients
 		# Also clip the gradients if they are larger than args.grad_clip
@@ -174,7 +186,8 @@ class VanillaLSTMModel():
 
 		# self.gradients is a list of tuples of (grad_value, variable_name)
 		self.gradients = tf.gradients(self.cost, trainable_vars)
-		if args.model_unit_test_flag == True:
+		if args.test == True:
+			print("TESTING TESTING TESTING")
 			for i in xrange(len(self.gradients)):
 				if self.gradients[i] == None:
 					self.gradients[i] = tf.zeros(shape=trainable_vars[i].get_shape(), dtype=tf.float32)
@@ -202,13 +215,16 @@ def main():
 	This function is used for unit testing this module.
 	    args.hidden_size (i.e. the size of hidden state)
 		args.num_layers (default = 1, i.e. no stacking), 
-		args.seq_length, 
+		args.input_seq_length,
+		args.target_seq_length, 
 	    args.input_embedding_size, 
 		args.output_vocab_size,
 		args.batch_size (i.e. the number of sequences in each batch)
 		args.optimizer_choice (defualt = "rms", also could be "adam", "grad_desc")
 		args.learning_rate, 
 		args.grad_clip
+		args.test
+		args.verbose
 	'''
 	parser = argparse.ArgumentParser()
 	# RNN cell hidden state's size
@@ -217,9 +233,12 @@ def main():
 	# Number of stacked RNN layers. Only a single layer implemented
 	parser.add_argument('--num_layers', type=int, default=1,
 	                    help='number of stacked RNN layers')
-	# Maximum length of each sequence
-	parser.add_argument('--seq_length', type=int, default=20,
-	                    help='maximum length of each sequence')
+	# Larger than the max length of each input sequence
+	parser.add_argument('--input_seq_length', type=int, default=20,
+	                    help='maximum length of each input sequence or larger')
+	# Larger than the max of each target sequence
+	parser.add_argument('--target_seq_length', type=int, default=20,
+	                    help='maximum length of each target sequence or larger')
 	# Embedding size of input
 	parser.add_argument('--input_embedding_size', type=int, default=96,
 	                    help='embedding size of input vectors')
@@ -238,16 +257,19 @@ def main():
 	# Gradient clip, i.e. maximum value of gradient amplitute allowed
 	parser.add_argument('--grad_clip', type=float, default=None,
 	                    help='gradient upbound, i.e. maximum value of gradient amplitute allowed')
-	# Model unit testing flag
-	parser.add_argument('--model_unit_test_flag', type=bool, default=True,
+	# Model unit testing flag, default to False
+	parser.add_argument('-t','--test', action='store_true',
 	                    help='only set to true when performing unit test')
+	# Verbosity flag, default to False
+	parser.add_argument('-v','--verbose', action='store_true',
+	                    help='only set to true when you want verbosity')
 	# Parse the arguments, and construct the model
 	args = parser.parse_args()
-	args.model_unit_test_flag = True
+	#args.test = True
 	model = VanillaLSTMModel(args)
 	# TODO: (improve) maybe we do something more?
 
 
 if __name__ == "__main__":
 	main()
-	print("this module is functioning.") # test passed. March 5, 2017
+	print("this module is functioning.") # test passed. 20:55 March 5, 2017
