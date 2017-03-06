@@ -6,6 +6,8 @@ Project mentor: Prof. Chirs Manning
 
 Author: Haihong Li
 Date: March 1, 2017
+- - - - -
+Vanilla LSTM model, comprised of a classic encoder-decoder model.
 """
 
 import tensorflow as tf
@@ -46,7 +48,7 @@ class VanillaLSTMModel():
 		      + "Time: " + time.ctime() + "\n" \
 			  + "  args.hidden_size (H) = " + str(args.hidden_size) + "\n" \
 			  + "  args.input_embedding_size (Di) = " + str(args.input_embedding_size) + "\n" \
-			  + "  args.output_vocab_size (Do) = " + str(args.output_vocab_size) + "\n" \
+			  + "  args.output_vocab_size (Vo) = " + str(args.output_vocab_size) + "\n" \
 			  + "  args.num_layers = " + str(args.num_layers) + "\n" \
 			  + "  args.optimizer_choice = " + args.optimizer_choice + "\n" \
 			  + "  args.learning_rate = " + str(args.learning_rate) + "\n" \
@@ -109,7 +111,8 @@ class VanillaLSTMModel():
 		#print("[DEBUG] self.initial_state: " + str(self.initial_state))
 		#with tf.variable_scope("vanLSTM_encoder"):
 		_, self.encoder_final_state = rnn_segment.run(cell=encoder_cell, 
-													  inputs=input_data_list, 
+													  inputs=input_data_list,
+													  cell_input_size=args.input_embedding_size,
 													  initial_state=self.initial_state, 
 													  feed_previous=False,
 													  loop_func=None,
@@ -120,7 +123,8 @@ class VanillaLSTMModel():
 		#print("[DEBUG] self.decoder_inital_state: " + str(self.decoder_cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)))
 		self.output_data = self.input_data
 		self.cell_outputs, _ = rnn_segment.run(cell=decoder_cell, 
-											  inputs=input_data_list, 
+											  inputs=input_data_list,
+											  cell_input_size=[args.batch_size, args.output_vocab_size], 
 											  initial_state=self.encoder_final_state, 
 											  feed_previous=True,
 											  loop_func=self.output_converter_lambda,
