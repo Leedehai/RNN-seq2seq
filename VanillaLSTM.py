@@ -197,19 +197,19 @@ def main():
 	'''
 	parser = argparse.ArgumentParser()
 	# RNN cell hidden state's size
-	parser.add_argument('--hidden_size', type=int, default=3,
+	parser.add_argument('--hidden_size', type=int, default=96,
 	                    help='size of RNN cell hidden state')
 	# Number of stacked RNN layers. Only a single layer implemented
 	parser.add_argument('--num_layers', type=int, default=1,
 	                    help='number of stacked RNN layers')
 	# Maximum length of each sequence
-	parser.add_argument('--seq_length', type=int, default=12,
+	parser.add_argument('--seq_length', type=int, default=250,
 	                    help='maximum length of each sequence')
 	# Embedding size of input
-	parser.add_argument('--input_embedding_size', type=int, default=2,
+	parser.add_argument('--input_embedding_size', type=int, default=128,
 	                    help='embedding size of input vectors')
 	# Embedding size of output
-	parser.add_argument('--output_embedding_size', type=int, default=2,
+	parser.add_argument('--output_embedding_size', type=int, default=120,
 	                    help='embedding size of output vectors')
 	# Batch size
 	parser.add_argument('--batch_size', type=int, default=100,
