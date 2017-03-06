@@ -205,10 +205,10 @@ def main():
 	parser.add_argument('--seq_length', type=int, default=20,
 	                    help='maximum length of each sequence')
 	# Embedding size of input
-	parser.add_argument('--input_embedding_size', type=int, default=128,
+	parser.add_argument('--input_embedding_size', type=int, default=96,
 	                    help='embedding size of input vectors')
 	# Embedding size of output
-	parser.add_argument('--output_embedding_size', type=int, default=120,
+	parser.add_argument('--output_embedding_size', type=int, default=92,
 	                    help='embedding size of output vectors')
 	# Batch size
 	parser.add_argument('--batch_size', type=int, default=100,
