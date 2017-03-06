@@ -61,11 +61,10 @@ class VanillaLSTMModel():
 
 		# initialize a LSTM cell unit, hidden_size is the dimension of hidden state
 		# TODO: (resolve) are the two kinds of cell's hidden state of the same size?
-		with tf.variable_scope("vanLSTM_encoder"):
-			encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
-		with tf.variable_scope("vanLSTM_decoder"):
-			decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
-			# y_hat = softmax(tf.add(tf.matmul(cell_output, output_ws), output_bs)), output_bs = zeros, for now
+		encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
+		decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(args.hidden_size, state_is_tuple=True)
+		# y_hat = softmax(tf.add(tf.matmul(cell_output, output_ws), output_bs)), output_bs = zeros, for now
+		with tf.variable_scope("vanLSTM_decoder/decoder_accessory"):
 			self.output_ws = tf.get_variable("output_ws", [args.hidden_size, args.output_embedding_size])
 			self.output_converter_lambda = lambda cell_output: tf.nn.softmax(logits=tf.matmul(cell_output, self.output_ws), dim=1)
 
@@ -203,7 +202,7 @@ def main():
 	parser.add_argument('--num_layers', type=int, default=1,
 	                    help='number of stacked RNN layers')
 	# Maximum length of each sequence
-	parser.add_argument('--seq_length', type=int, default=250,
+	parser.add_argument('--seq_length', type=int, default=20,
 	                    help='maximum length of each sequence')
 	# Embedding size of input
 	parser.add_argument('--input_embedding_size', type=int, default=128,

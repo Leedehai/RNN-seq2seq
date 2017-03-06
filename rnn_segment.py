@@ -47,6 +47,7 @@ def run(cell, inputs, initial_state, feed_previous=False, loop_func=None, scope=
 	#outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state)
 	#return (outputs, state)
 	print "\n\033[32m[DEBUG] an rnn_segement.run() is linked into the computational graph in scope " + scope + "\033[m"
+	
 	with tf.variable_scope(scope):
 		cell_state = initial_state
 		print("\n[DEBUG] initial_state: " + str(initial_state))
@@ -61,7 +62,7 @@ def run(cell, inputs, initial_state, feed_previous=False, loop_func=None, scope=
 				#pdb.set_trace()
 			print("\n[DEBUG] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_input: " + str(cell_input))
 			print("\n[DEBUG] \033[34mBEFORE CELL " + scope + "\n" + str(i) + " \033[mcell_state: " + str(cell_state))
-			cell_output, cell_state = cell(cell_input, cell_state, scope)
+			cell_output, cell_state = cell(cell_input, cell_state)
 			print("\n[DEBUG] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_output: " + str(cell_output))
 			print("\n[DEBUG] \033[36mAFTER CELL " + scope + "\n" + str(i) + " \033[mcell_state: " + str(cell_state))
 			outputs.append(cell_output)
